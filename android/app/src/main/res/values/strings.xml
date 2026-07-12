@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">瑞克莫蒂对战</string>
+    <string name="title_activity_main">瑞克莫蒂对战</string>
+    <string name="package_name">com.rick.morty.fight</string>
+    <string name="custom_url_scheme">com.rick.morty.fight</string>
+</resources>

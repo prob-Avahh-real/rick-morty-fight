@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>瑞克莫蒂对战</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a10;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+canvas{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+#hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:8px 12px;pointer-events:none;z-index:10;color:#80ff80}
+.health-bar{width:120px;height:14px;background:#202030;border:2px solid#303040;border-radius:7px;overflow:hidden}
+.health-fill{height:100%;transition:width.3s;border-radius:5px}
+.health-label{font-size:10px;text-align:center;margin-bottom:2px}
+#rick-hp{background:linear-gradient(90deg,#40ff80,#20c040)}#morty-hp{background:linear-gradient(90deg,#ff8040,#c04020)}
+#controls{position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:space-between;padding:0 10px;z-index:10}
+.ctrl-group{display:flex;gap:4px}
+.cbtn{width:44px;height:44px;border-radius:50%;border:2px solid#303040;background:rgba(15,15,25,.9);color:#a0b0c0;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;text-align:center}
+.cbtn.special{background:rgba(30,20,40,.9);border-color:#6040a0;color:#c080e0}
+.cbtn:active{transform:scale(.9);background:rgba(40,30,50,.9)}
+#round-text{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);font-size:32px;font-weight:900;color:#fff;z-index:20;pointer-events:none;opacity:0;transition:opacity.3s}
+#start-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:30;background:linear-gradient(135deg,#40ff80,#20a040);border:none;color:#000;font-size:18px;font-weight:900;padding:12px 32px;border-radius:24px;cursor:pointer}
+#start-btn:active{transform:translate(-50%,-50%) scale(.95)}
+</style>
+</head>
+<body>
+<div id="round-text"></div>
+<button id="start-btn" onclick="startGame()">🥒 开战！</button>
+<div id="hud" style="display:none">
+  <div><div class="health-label">Rick</div><div class="health-bar"><div class="health-fill" id="rick-hp-fill" style="width:100%"></div></div></div>
+  <div><div class="health-label">Morty</div><div class="health-bar"><div class="health-fill" id="morty-hp-fill" style="width:100%"></div></div></div>
+</div>
+<div id="controls" style="display:none">
+  <div class="ctrl-group"><button class="cbtn" ontouchstart="playerAttack(0,0)" onmousedown="playerAttack(0,0)">拳</button><button class="cbtn" ontouchstart="playerAttack(0,1)" onmousedown="playerAttack(0,1)">踢</button><button class="cbtn special" ontouchstart="playerAttack(0,2)" onmousedown="playerAttack(0,2)">🔫</button></div>
+  <div class="ctrl-group"><button class="cbtn special" ontouchstart="playerAttack(1,2)" onmousedown="playerAttack(1,2)">😱</button><button class="cbtn" ontouchstart="playerAttack(1,1)" onmousedown="playerAttack(1,1)">踢</button><button class="cbtn" ontouchstart="playerAttack(1,0)" onmousedown="playerAttack(1,0)">拳</button></div>
+</div>
+<canvas id="game"></canvas>
+<script>
+const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
+let W,H,gameState="waiting",players=[],particles=[],portals=[],round=0,timer=0;
+let G=0;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;G=H*.75}
+window.addEventListener("resize",resize);resize();
+
+function createPlayer(x,name,color,hair){
+  return{x, y:G-40, vx:0, vy:0, w:24, h:40, name, color, hair, hp:100, maxHp:100, stunned:0, facing:name==="Rick"?1:-1,
+    anim:"idle", animTimer:0, attackTimer:0, combo:0, specCooldown:0}}
+function init(){players=[createPlayer(W*.25,"Rick","#80e0ff","#60a0d0"),createPlayer(W*.75,"Morty","#ffc080","#c08060")];particles=[];portals=[];round=0;timer=0}
+
+function startGame(){document.getElementById("start-btn").style.display="none";document.getElementById("hud").style.display="flex";document.getElementById("controls").style.display="flex";init();gameState="fighting";loop()}
+
+function playerAttack(pi,type){
+  if(gameState!=="fighting")return;const p=players[pi];if(p.stunned>0||p.attackTimer>0)return;
+  const opp=players[1-pi];const dx=opp.x-p.x;p.facing=dx>0?1:-1;
+  if(type===2&&p.specCooldown>0)return;
+  p.attackTimer=20;let dmg=0,knock=0;
+  if(type===0){dmg=5+p.combo*2;knock=3;p.combo++;p.animTimer=15} // punch
+  else if(type===1){dmg=8+p.combo*2;knock=5;p.combo++;p.animTimer=20} // kick
+  else if(type===2){ // special
+    p.specCooldown=120;
+    if(p.name==="Rick"){ // Portal gun
+      const px=opp.x+(Math.random()-.5)*100;const py=G-40;p.x=Math.max(20,Math.min(W-20,px));p.y=py;
+      portals.push({x:p.x,y:py,r:30,l:30,x2:opp.x,y2:opp.y});dmg=15;knock=8;
+    }else{ // Morty panic - AOE stun
+      if(Math.abs(dx)<60){opp.stunned=40;dmg=3};p.combo=0}
+    p.animTimer=25}
+  if(Math.abs(dx)<50){opp.hp-=dmg;opp.vx=p.facing*knock*2;opp.vy=-5;opp.stunned=Math.max(opp.stunned,12)}
+  // Particles
+  for(let i=0;i<8;i++)particles.push({x:opp.x,y:opp.y-20,vx:(Math.random()-.5)*6,vy:(Math.random()-1)*4,color:opp.color,l:20})
+  opp.combo=0;updateHUD()}
+
+function update(){
+  if(gameState!=="fighting")return;timer++;
+  for(const p of players){
+    if(p.attackTimer>0)p.attackTimer--;else p.combo=0;
+    if(p.stunned>0)p.stunned--;if(p.specCooldown>0)p.specCooldown--;
+    if(p.animTimer>0)p.animTimer--;p.vx*=0.9;p.vy+=0.5;p.y+=p.vy;p.x+=p.vx;
+    if(p.y>=G-40){p.y=G-40;p.vy=0}if(p.x<10)p.x=10;if(p.x>W-10)p.x=W-10}
+  // Portals
+  for(const po of portals){po.l--;if(po.l>0&&po.l<5){const p=players[0];p.x=po.x2;p.y=po.y2}}portals=portals.filter(p=>p.l>0)
+  // Particles
+  for(const pt of particles){pt.x+=pt.vx;pt.y+=pt.vy;pt.vy+=.2;pt.l--}particles=particles.filter(p=>p.l>0)
+  // Check KO
+  for(const p of players){if(p.hp<=0){endRound(p.name==="Rick"?"Morty":"Rick");return}}
+  // Idle separation
+  const rick=players[0],morty=players[1];const dx=morty.x-rick.x;
+  if(Math.abs(dx)>W*.6){rick.x+=dx>0?1:-1;morty.x-=dx>0?1:-1}
+  updateHUD();render()}
+
+function endRound(winner){
+  const el=document.getElementById("round-text");el.textContent=winner+" wins!";el.style.opacity="1";
+  gameState="roundOver";setTimeout(()=>{el.style.opacity="0";init();gameState="fighting";loop()},2000)}
+
+function updateHUD(){
+  document.getElementById("rick-hp-fill").style.width=(players[0].hp/players[0].maxHp*100)+"%";
+  document.getElementById("morty-hp-fill").style.width=(players[1].hp/players[1].maxHp*100)+"%"}
+
+function render(){
+  ctx.clearRect(0,0,W,H);const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,"#0a0a18");bg.addColorStop(.5,"#101025");bg.addColorStop(1,"#0a0a10");ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  // Ground
+  ctx.fillStyle="#1a1a2a";ctx.fillRect(0,G,W,H-G);ctx.strokeStyle="#303050";ctx.beginPath();ctx.moveTo(0,G);ctx.lineTo(W,G);ctx.stroke();
+  // Portals
+  for(const po of portals){ctx.fillStyle="rgba(64,255,128,"+(po.l/30*.5)+")";ctx.beginPath();ctx.ellipse(po.x,po.y,po.r,po.r*.3,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#40ff80";ctx.beginPath();ctx.ellipse(po.x,po.y,po.r,po.r*.3,0,0,Math.PI*2);ctx.stroke()}
+  // Particles
+  for(const pt of particles){ctx.fillStyle=pt.color+Math.floor(pt.l/20*255).toString(16).padStart(2,"0");ctx.beginPath();ctx.arc(pt.x,pt.y,Math.max(1,pt.l/5),0,Math.PI*2);ctx.fill()}
+  // Players
+  for(const p of players)drawPlayer(p)
+  // Cooldown indicator
+  for(let i=0;i<2;i++){const p=players[i];if(p.specCooldown>0){ctx.fillStyle="rgba(255,255,255,.6)";ctx.font="11px monospace";ctx.fillText("⚡"+(p.specCooldown/60).toFixed(1)+"s",p.x-20,p.y-50)}}
+  requestAnimationFrame(loop)}
+
+function drawPlayer(p){
+  const sx=p.facing;const bob=Math.sin(timer*.2)*2;
+  ctx.save();ctx.translate(p.x,p.y);ctx.scale(sx,1);
+  // Body
+  ctx.fillStyle=p.color;ctx.fillRect(-8,0-8,16,24);
+  // Legs
+  const anim=p.animTimer>0;ctx.fillStyle="#666";ctx.fillRect(-6,16,5,anim?14:16);ctx.fillRect(1,16,5,anim?16:14);
+  // Head
+  const headY=-12+bob;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(0,headY,10,0,Math.PI*2);ctx.fill();
+  // Hair
+  ctx.fillStyle=p.hair;ctx.beginPath();ctx.arc(0,headY-3,11,Math.PI,0);ctx.fill();
+  // Eyes
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(-3,headY-2,3,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(3,headY-2,3,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#000";ctx.beginPath();ctx.arc(-3,headY-2,1.5,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(3,headY-2,1.5,0,Math.PI*2);ctx.fill();
+  // Mouth (Morty = worried)
+  if(p.name==="Morty"){ctx.strokeStyle="#000";ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,headY+3,3,0,Math.PI);ctx.stroke()}
+  // Arms
+  ctx.fillStyle=p.color;ctx.fillRect(-12,0,5,anim?10:14);ctx.fillRect(7,0,5,anim?14:10);
+  // Weapon (Rick)
+  if(p.name==="Rick"&&p.animTimer>0){ctx.fillStyle="#40ff80";ctx.fillRect(10,-2,8,3);ctx.fillStyle="#80ff80";ctx.beginPath();ctx.arc(18,-1,2,0,Math.PI*2);ctx.fill()}
+  ctx.restore()}
+
+function loop(){if(gameState==="fighting")render()}
+</script>
+</body>
+</html>
